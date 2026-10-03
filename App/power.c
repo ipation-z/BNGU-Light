@@ -32,6 +32,7 @@
   ******************************************************************************
   */
 #include "main.h"
+#include <stdio.h>
 #include "app_config.h"
 #include "adc.h"
 #include "led_matrix.h"
@@ -147,23 +148,44 @@ void power_tick(void)
             if (++s_to >= PWR_RELEASE_TIMEOUT) {
                 s_state = PWR_DISABLED;
                 s_to    = 0u;
-                telemetry_line("PWR", "key still HIGH - power-off DISABLED");
+                telemetry_line("PWR", "key held >5s - waiting for release to re-arm");
             }
         }
         break;
 
-    /* 已武装：按住 300ms 就关机 */
+    /* 已武装：按住 PWR_OFF_HOLD_TICKS 就关机（不等松手） */
     case PWR_ARMED:
         if (mv >= PWR_KEY_MV_THRESHOLD) {
+            if (s_cnt == 0u) {
+                /* 按下沿打一行带实际 mV 的日志：
+                   如果按了却没看到这行，说明 ADC 根本没读到按键，问题在采样侧 */
+                char msg[48];
+                (void)snprintf(msg, sizeof msg, "key %umV pressed - hold %uticks to off",
+                               (unsigned)mv, (unsigned)PWR_OFF_HOLD_TICKS);
+                telemetry_line("PWR", msg);
+            }
             if (++s_cnt >= PWR_OFF_HOLD_TICKS) {
                 do_shutdown();
             }
         } else {
+            if (s_cnt > 0u) {
+                telemetry_line("PWR", "released before threshold - cancelled");
+            }
             s_cnt = 0u;
         }
         break;
 
-    default:                    /* PWR_DISABLED：什么都不做 */
+    /* 超时后曾经放弃过关机检测。但按键随时可能被松开 ——
+       一旦读到松开就立刻重新武装。
+       这一条很关键：上电时按键本来就是按住的，如果按住的时间超过了超时时间
+       （比如按着电源键看那 5.8 秒的开机自检动画），旧版本会永久停在
+       DISABLED，导致这次上电**再也关不掉**，只能拔电。 */
+    default:                    /* PWR_DISABLED */
+        if (mv < PWR_KEY_MV_THRESHOLD) {
+            s_state = PWR_ARMED;
+            s_cnt   = 0u;
+            telemetry_line("PWR", "key released - power-off re-armed");
+        }
         break;
     }
 }
