@@ -49,17 +49,13 @@
 #define TLM_PERIOD_TICKS      10u     /* 100Hz / 10 = 10Hz */
 #define TLM_BUF_SIZE          128u
 
-/* ============================ 描边游走自检 ============================ */
+/* ============================ MODE5 描边游走（兼开机动画）============================ */
 /* 节奏：1 tick = 10ms（来自 TIM3 的 100Hz 应用节拍）
  *
- *  SELFTEST_STEP_TICKS      亮点每走一个点的时间（决定"走得快不快"）
- *      6  →  60ms/点   走完 32 点 ≈ 1.9s   偏快，单颗灯看不清
- *      8  →  80ms/点   走完 32 点 ≈ 2.6s
- *     10  → 100ms/点   走完 32 点 ≈ 3.2s
- *     12  → 120ms/点   走完 32 点 ≈ 3.8s   ← 当前
- *     15  → 150ms/点   走完 32 点 ≈ 4.8s   偏拖沓
- *     20  → 200ms/点   走完 32 点 ≈ 6.4s
- *     25  → 250ms/点   走完 32 点 ≈ 8.0s   很慢，适合逐点检查焊接
+ *  走速不在这里 —— 由全局速度参数 g_speed 控制（见下面的 SPEED_* 和电位器）：
+ *      g_speed = 12 → 120ms/点（默认手感）
+ *      g_speed = 25 → 250ms/点（慢，适合逐点检查焊接）
+ *      g_speed =  2 → 20ms/点 （最快）
  *
  *  SELFTEST_HOLD_ON_TICKS   全亮保持多久（演示/拍照用）
  *  SELFTEST_FADE_TICKS      渐亮 / 渐灭的步长：每多少 tick 变 1 级亮度
@@ -68,11 +64,8 @@
  *
  *  平滑彗尾：亮点不是"一格一格跳"，而是一个连续的三角亮度分布滑过 32 个点。
  *    POS_PER_DOT        每个点细分成多少个位置（越大越平滑，CPU 略增）
- *    POS_ADVANCE_TICKS  每多少个 tick 前进 1 个子位置
- *    → 一个点的走行时间 = POS_PER_DOT × POS_ADVANCE_TICKS 个 tick
- *        12 × 1 = 12 tick = 120ms/点   ← 当前
- *        12 × 2 = 24 tick = 240ms/点   （慢一倍，平滑度不变）
- *        20 × 1 = 20 tick = 200ms/点   （更平滑也更慢）
+ *    → 走速由全局速度参数 g_speed（tick 数/点）决定：
+ *        g_speed = POS_PER_DOT(12) 时正好 120ms/点，也就是现在的手感
  *    COMET_LEAD  头部前方渐亮跨几个点（0 = 头部直接跳到满亮，会有"啪"的跳变）
  *    COMET_TAIL  头部后方渐灭跨几个点（越大拖尾越长）
  */
@@ -81,12 +74,64 @@
 #define SELFTEST_HOLD_OFF_TICKS   30u   /* 0.3s 全灭 */
 
 #define POS_PER_DOT               12u   /* 每个点细分成 12 个位置 */
-#define POS_ADVANCE_TICKS          1u   /* 每 1 个 tick 前进 1 个子位置 */
 #define COMET_LEAD                 1u   /* 头部前方 1 个点的渐亮 */
 #define COMET_TAIL                 3u   /* 头部后方 3 个点的渐灭 */
 
-/* ============================ 应用状态默认值 ============================ */
-#define MODE_SELFTEST         0u
-#define SPEED_DEFAULT         30u
+/* ============================ 模式号 ============================ */
+/* MODE3 / MODE4 是 Phase C / Phase D 的内容，先占号不实现 */
+#define MODE_COUNT                 6u
+#define MODE_WRITE                 1u   /* 累计书写 + 逆序擦除 */
+#define MODE_FLOW                  2u   /* 字符流水 */
+#define MODE_BREATH                3u   /* 同步呼吸（Phase C） */
+#define MODE_MIX                   4u   /* 流水 + 呼吸（Phase D） */
+#define MODE_WALK                  5u   /* 描边游走（也用作开机动画） */
+
+/* ============================ 按键 ============================ */
+#define KEY_DEBOUNCE_TICKS         3u   /* 3 × 10ms = 30ms 去抖 */
+
+/* 切换模式时的闪灯提示：闪"模式号"次（MODE1 闪 1 下、MODE5 闪 5 下）
+   一下 = FLASH_ON + FLASH_OFF = 10 + 7 = 17 tick = 170ms
+   所以整段提示时长：MODE1 0.17s / MODE2 0.34s / MODE5 0.85s
+   想让闪得更慢就加大这两个值，想更快就减小。 */
+#define FLASH_ON_TICKS            10u   /* 每次亮 100ms */
+#define FLASH_OFF_TICKS            7u   /* 每次灭  70ms（就是"间隔"，比原来 60ms 略长） */
+
+/* ============================ 电位器 ============================ */
+/* 上板后用万用表量一下电位器两端实际 mV，填进来可以做满量程标定 */
+#define POT_MV_MIN               100u
+#define POT_MV_MAX              3200u
+
+/* 电位器拧到最左时的最低亮度档：不要给 1 —— 1 级时每颗灯平均只有 0.15mA，
+   亮房间里看着就是黑的。4 级约 0.6mA，任何光线下都看得见。 */
+#define BRIGHT_MIN                 4u
+
+/* 软接管：切换 KEY3 档位（或刚上电 / 切模式）时先把参数冻结住，
+   等电位器真的转过这么多百分比才重新跟手 —— 避免参数突然跳变。
+   5% 也是为了滤掉 ADC 的抖动。 */
+#define POT_TAKEOVER_PCT           5u
+
+#define POT_TARGET_BRIGHT          0u   /* 电位器只调亮度峰值 */
+#define POT_TARGET_SPEED           1u   /* 电位器只调速度 */
+#define POT_TARGET_BOTH            2u   /* 联动（默认） */
+#define POT_TARGET_COUNT           3u
+
+/* ============================ 全局参数默认/范围 ============================ */
+/* 速度单位：每多少 tick（10ms）推进一步，越小越快 */
+#define SPEED_MIN                  2u   /* 20ms/步   最快 */
+#define SPEED_MAX                 50u   /* 500ms/步  最慢 */
+#define SPEED_DEFAULT             12u   /* 120ms/步 */
+
+/* 各模式的速度倍率：让同一个速度参数在每个模式里都"看起来合适" */
+#define MODE1_SPEED_MUL            1u   /* 每走一个点 */
+#define MODE2_SPEED_MUL            3u   /* 每个字母保持 3 倍时长 */
+
+/* MODE1 的保持时间 */
+#define MODE1_HOLD_ON_TICKS       30u   /* 全亮保持 0.3s */
+#define MODE1_HOLD_OFF_TICKS      20u   /* 全灭保持 0.2s */
+
+/* MODE1 的渐亮 / 渐灭：过渡跨几个点。
+   1 = 和 MODE5 彗尾头部同样的柔度；0 会变成"一格一格硬跳"。
+   注意它不影响节奏 —— 每点亮/熄灭一个点仍然用 g_speed 个 tick。 */
+#define MODE1_FADE_DOTS            1u
 
 #endif /* __APP_CONFIG_H */

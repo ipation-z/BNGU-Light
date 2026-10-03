@@ -49,7 +49,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/led_matrix.c
     App/adc.c
     App/telemetry.c
-    App/selftest.c
+    App/keys.c
+    App/effects.c
+    App/display_data.c
+    App/mode_walk.c
+    App/mode_write.c
+    App/mode_flow.c
 )
 
 # Add include paths

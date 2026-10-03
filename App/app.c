@@ -10,10 +10,10 @@
 #include "led_matrix.h"
 #include "adc.h"
 #include "telemetry.h"
-#include "selftest.h"
+#include "keys.h"
+#include "effects.h"
 
-volatile uint8_t  g_mode  = MODE_SELFTEST;
-volatile uint8_t  g_speed = SPEED_DEFAULT;
+volatile uint8_t  g_mode = MODE_WALK;      /* effects_init() 会重新设置 */
 volatile uint32_t g_app_tick;
 
 static uint32_t s_last_tick;
@@ -25,7 +25,8 @@ void app_init(void)
     led_matrix_init();      /* 先把帧数据清零、栅极置安全态 */
     adc_init();             /* ADC 校准 + 启动 DMA */
     telemetry_init();       /* 开机横幅 */
-    selftest_init();        /* 准备第一帧自检画面 */
+    keys_init();            /* KEY2/KEY3 去抖状态 */
+    effects_init();         /* 进入开机动画（MODE5 只跑一轮，然后进 MODE1） */
 
     /* 启动顺序：
      *   TIM3 先跑 —— 它既是应用节拍，又通过 TRGO 触发 ADC 采样（必须在
@@ -42,10 +43,8 @@ void app_init(void)
 void app_tick(void)
 {
     adc_update();          /* 读 DMA 缓冲、换算 mV、轻滤波 */
-
-    if (g_mode == MODE_SELFTEST) {
-        selftest_tick();   /* 推进描边游走自检 */
-    }
+    keys_tick();           /* KEY2/KEY3 采样与去抖 */
+    effects_tick();        /* 电位器解析 + 模式推进 */
 
     if (++s_tlm_div >= TLM_PERIOD_TICKS) {
         s_tlm_div = 0u;
