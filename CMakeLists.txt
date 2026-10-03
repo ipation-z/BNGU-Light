@@ -55,6 +55,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/mode_walk.c
     App/mode_write.c
     App/mode_flow.c
+    App/mode_breath.c
 )
 
 # Add include paths

@@ -32,4 +32,8 @@ void mode_write_step(void);
 void mode_flow_init(void);
 void mode_flow_step(void);
 
+/* MODE3 同步呼吸 */
+void mode_breath_init(void);
+void mode_breath_step(void);
+
 #endif /* __MODES_H */
