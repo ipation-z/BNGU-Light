@@ -55,8 +55,17 @@ static uint16_t    s_start;  /* 上电静默期剩余节拍 */
 /* 关机时序：永不返回 */
 static void do_shutdown(void)
 {
+    uint8_t i;
+
     s_state = PWR_OFF;          /* 先置位，保证中断重入也不会再走一遍 */
 
+    /* 等发送空闲（最多 30ms），保证关机提示一定发得出去而不是被丢弃 */
+    for (i = 0u; i < 15u; i++) {
+        if (telemetry_tx_idle() != 0u) {
+            break;
+        }
+        HAL_Delay(2);
+    }
     telemetry_line("PWR", "shutdown - releasing latch");
     HAL_Delay(10);              /* 让这行字从串口发出去（10ms，用户感觉不到） */
 

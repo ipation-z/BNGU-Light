@@ -51,6 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/telemetry.c
     App/keys.c
     App/power.c
+    App/cli.c
     App/effects.c
     App/display_data.c
     App/breath.c

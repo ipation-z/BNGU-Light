@@ -186,4 +186,19 @@
    就是普通"按一下"的时长，同时挡住抖动和误触。 */
 #define PWR_OFF_HOLD_TICKS         30u
 
+/* ==================== 串口 / 蓝牙指令（App/cli.c）==================== */
+/* 指令回包队列：一次要回多行（比如 HELP）时排队，由 telemetry_pump()
+   每 10ms 发一行，避免第二行被"发送忙"标志吃掉。 */
+#define TLM_QUEUE_N                 4u
+
+/* HAL 的接收缓冲长度。手机一条指令最多十几个字节，32 足够。 */
+#define CLI_RX_SIZE                32u
+
+/* 一条指令最长多少字符（含结尾 '\0'）。超了整行丢弃并回错误。 */
+#define CLI_LINE_MAX               24u
+
+/* 指令没带换行符时，线上静默这么多节拍（20 × 10ms = 200ms）
+   就当成一条完整指令 —— 有些手机串口 App 发送时不加换行。 */
+#define CLI_QUIET_TICKS            20u
+
 #endif /* __APP_CONFIG_H */

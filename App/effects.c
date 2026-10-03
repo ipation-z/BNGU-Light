@@ -119,7 +119,17 @@ void effects_set_mode_now(uint8_t m)
 
 void effects_request_mode(uint8_t m)
 {
-    if ((mode_desc(m) == NULL) || (m == g_mode)) {
+    if (mode_desc(m) == NULL) {
+        return;
+    }
+    /* 待机（黑屏等按键）时收到串口指令：直接叫醒并切过去。
+       注意这里不能走下面的"已经是当前模式就返回" ——
+       待机时 g_mode 还停在开机动画那档，会被误判成"已经切好了"，
+       结果屏幕亮着却永远不推进（flash_tick 在待机分支里根本跑不到）。 */
+    if (s_standby != 0u) {
+        s_standby = 0u;
+        telemetry_line("BOOT", "woken by serial MODE command");
+    } else if (m == g_mode) {
         return;
     }
     s_pend_mode   = m;
@@ -245,6 +255,100 @@ static void pot_update(void)
         g_speed  = pct_to_speed(p);
         break;
     }
+}
+
+/*---------------------------------------------------------------------------*/
+/* 串口 / 蓝牙控制（App/cli.c 调用）                                          */
+/*---------------------------------------------------------------------------*/
+
+/* 待机（黑屏等按键）时被串口指令叫醒：进入默认模式 MODE1。
+   不做这一步的话，待机期间发 BRIGHT/SPEED 只会改参数而屏幕依旧全黑，
+   用户会以为"蓝牙没反应"。 */
+void effects_wake(void)
+{
+    if (s_standby != 0u) {
+        s_standby = 0u;
+        telemetry_line("BOOT", "woken by serial command -> MODE1 WRITE");
+        do_switch(MODE_WRITE);
+    }
+}
+
+/* 按百分比设置亮度峰值。走的是和电位器完全相同的平方律，
+   所以"蓝牙发 50%"和"电位器拧到中间"效果一模一样。
+   设完立刻调 pot_freeze() 冻结软接管 —— 这是关键：
+   pot_update() 每 10ms 跑一次，不冻结的话刚才设的值马上就被 ADC 覆盖掉。 */
+void effects_set_bright_pct(uint8_t pct)
+{
+    if (pct > 100u) {
+        pct = 100u;
+    }
+    effects_wake();
+    g_bright = pct_to_bright(pct);
+    pot_freeze();
+}
+
+void effects_set_speed_pct(uint8_t pct)
+{
+    if (pct > 100u) {
+        pct = 100u;
+    }
+    effects_wake();
+    g_speed = pct_to_speed(pct);
+    pot_freeze();
+}
+
+/* 反算当前值对应的百分比（ASK 回读用）。
+   档位只有 16 级，所以"能产生当前档位的百分比"是一段区间，
+   取区间中点 —— 这样发 BRIGHT50 就能读回 50，而不是 49。
+   只在收到 ASK 指令时跑一次，200 次循环的开销可以忽略。 */
+uint8_t effects_bright_pct(void)
+{
+    uint8_t lo = 100u;
+    uint8_t hi = 100u;
+    uint8_t p;
+
+    for (p = 0u; p <= 100u; p++) {
+        if (pct_to_bright(p) >= g_bright) {
+            lo = p;
+            break;
+        }
+    }
+    for (p = lo; p <= 100u; p++) {
+        if (pct_to_bright(p) != g_bright) {
+            break;
+        }
+        hi = p;
+    }
+    return (uint8_t)(((uint16_t)lo + (uint16_t)hi) / 2u);
+}
+
+uint8_t effects_speed_pct(void)
+{
+    uint8_t lo = 100u;
+    uint8_t hi = 100u;
+    uint8_t p;
+
+    /* 百分比越大 = tick 越小 = 越快，所以这里是"小于等于" */
+    for (p = 0u; p <= 100u; p++) {
+        if (pct_to_speed(p) <= g_speed) {
+            lo = p;
+            break;
+        }
+    }
+    for (p = lo; p <= 100u; p++) {
+        if (pct_to_speed(p) != g_speed) {
+            break;
+        }
+        hi = p;
+    }
+    return (uint8_t)(((uint16_t)lo + (uint16_t)hi) / 2u);
+}
+
+/* 1 = 电位器正在跟手（= 用户手动调节中）
+   0 = 参数已冻结（蓝牙刚设的值保持中，或刚切档/切模式） */
+uint8_t effects_pot_is_linked(void)
+{
+    return s_pot_linked;
 }
 
 /*---------------------------------------------------------------------------*/
