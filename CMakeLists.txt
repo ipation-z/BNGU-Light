@@ -52,10 +52,12 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/keys.c
     App/effects.c
     App/display_data.c
+    App/breath.c
     App/mode_walk.c
     App/mode_write.c
     App/mode_flow.c
     App/mode_breath.c
+    App/mode_mix.c
 )
 
 # Add include paths

@@ -36,4 +36,8 @@ void mode_flow_step(void);
 void mode_breath_init(void);
 void mode_breath_step(void);
 
+/* MODE4 流水 + 呼吸：一个字母呼吸一次后换下一个 */
+void mode_mix_init(void);
+void mode_mix_step(void);
+
 #endif /* __MODES_H */

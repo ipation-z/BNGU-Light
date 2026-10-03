@@ -37,11 +37,14 @@ static const mode_desc_t s_modes[MODE_COUNT] = {
     [MODE_WRITE]  = {"WRITE",  mode_write_init,  mode_write_step },
     [MODE_FLOW]   = {"FLOW",   mode_flow_init,   mode_flow_step  },
     [MODE_BREATH] = {"BREATH", mode_breath_init, mode_breath_step},
+    [MODE_MIX]    = {"MIX",    mode_mix_init,    mode_mix_step   },
     [MODE_WALK]   = {"WALK",   mode_walk_init,   mode_walk_step  }
 };
 
 /* KEY2 的循环顺序（只列已经实现的模式，以后加模式只改这一行） */
-static const uint8_t s_mode_order[] = { MODE_WRITE, MODE_FLOW, MODE_BREATH, MODE_WALK };
+static const uint8_t s_mode_order[] = {
+    MODE_WRITE, MODE_FLOW, MODE_BREATH, MODE_MIX, MODE_WALK
+};
 #define MODE_ORDER_N   (sizeof(s_mode_order) / sizeof(s_mode_order[0]))
 
 /* 闪灯提示状态 */

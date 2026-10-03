@@ -134,26 +134,30 @@
    注意它不影响节奏 —— 每点亮/熄灭一个点仍然用 g_speed 个 tick。 */
 #define MODE1_FADE_DOTS            1u
 
-/* ============================ MODE3 同步呼吸 ============================ */
-/* 包络有 BREATH_STEPS 个相位，每个相位持续 g_speed / MODE3_SPEED_DIV 个 tick。
-   相位比"点"细一倍，所以除 2，整体周期才和别的模式手感一致。 */
+/* ==================== 呼吸包络（MODE3 同步呼吸 / MODE4 流水+呼吸 共用）==================== */
+/* 包络是 64 相位的半正弦（见 App/breath.c）。
+   每个相位持续 g_speed / XXX_SPEED_DIV 个 tick：
+     MODE3 用 BREATH_SPEED_DIV，一轮同步呼吸 ≈ 4.2s
+     MODE4 用 MODE4_SPEED_DIV，每个字母一次呼吸 ≈ 2.1s（比 MODE3 快一倍，
+           否则 4 个字母轮流下来要 17 秒，演示时太拖） */
 #define BREATH_STEPS              64u
-#define MODE3_SPEED_DIV            2u
+#define BREATH_SPEED_DIV           2u
+#define MODE4_SPEED_DIV            4u
 
-/* 呼吸的最低亮度档。
-   0 = 最低点真的断电（duty 0，完全熄灭）。代价：duty 0↔1 在感知上是 0↔38%
-       的跳变（LED 在 1/19 占空比时就挺亮了），所以熄灭/点亮各会有一下"啪"。
-       不过 duty 1 时每颗灯平均只有 0.15mA，绝对值很低，加上最低点有停顿，
-       实际观感就是"灯熄了、停一下、再亮起来"。
-   1 = 最低点保留一点微光（0.15mA），底下那一步不会有跳变，但暗室里能看见残光。 */
-#define MODE3_DUTY_MIN             0u
-
-/* 呼吸的停顿：最低点停 MODE3_DARK_HOLD_PHASES 个相位，最高点停
-   MODE3_BRIGHT_HOLD_PHASES 个相位 —— 就是"吸-停-呼-停"的节奏。
+/* 呼吸的停顿：最低点停 BREATH_DARK_HOLD_PHASES 个相位，最高点停
+   BREATH_BRIGHT_HOLD_PHASES 个相位 —— 就是"吸-停-呼-停"的节奏。
    两个值保持相等，上升段和下降段的总时长才对称；只在下端停的话，
    眼睛会把"灭着不动"算进熄灭过程，看起来就是"变亮比熄灭快"。
    0 = 不停（连续起伏）。 */
-#define MODE3_DARK_HOLD_PHASES     3u
-#define MODE3_BRIGHT_HOLD_PHASES   3u
+#define BREATH_DARK_HOLD_PHASES    3u
+#define BREATH_BRIGHT_HOLD_PHASES  3u
+
+/* MODE3 的最低亮度档（MODE4 固定用 0，因为字母之间要真的黑掉才好分辨）。
+   0 = 最低点真的断电（duty 0，完全熄灭）。代价：duty 0↔1 在感知上是 0↔38%
+       的跳变（LED 在 1/19 占空比时就挺亮了），所以熄灭/点亮各会有一下"啪"。
+       不过 duty 1 时每颗灯平均只有 0.15mA，绝对值很低，加上极值点有停顿，
+       实际观感就是"灯熄了、停一下、再亮起来"。
+   1 = 最低点保留一点微光（0.15mA），底下那一步不会有跳变，但暗室里能看见残光。 */
+#define MODE3_DUTY_MIN             0u
 
 #endif /* __APP_CONFIG_H */
