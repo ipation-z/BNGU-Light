@@ -34,6 +34,10 @@ extern volatile uint32_t g_slot_cnt;    /* 1kHz 槽计数 */
 
 void led_matrix_init(void);
 
+/* 立即让 12 个栅极进入安全态（阴极全低 + 4 个 PMOS 全关断）。
+   用于关机时序：先停掉 TIM1/TIM2，再调它，避免中断把 GPIO 又改回去。 */
+void led_matrix_off(void);
+
 /* 提交一帧权重。内部会推导子时段掩码，并关中断 <2µs 一次性发布，
    保证四个字符不会出现"半新半旧"。 */
 void led_matrix_publish(const uint8_t weight[LED_CHAR_COUNT][LED_DOT_PER_CHAR]);

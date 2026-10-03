@@ -12,6 +12,7 @@
 #include "telemetry.h"
 #include "keys.h"
 #include "effects.h"
+#include "power.h"
 
 volatile uint8_t  g_mode = MODE_WALK;      /* effects_init() 会重新设置 */
 volatile uint32_t g_app_tick;
@@ -26,7 +27,8 @@ void app_init(void)
     adc_init();             /* ADC 校准 + 启动 DMA */
     telemetry_init();       /* 开机横幅 */
     keys_init();            /* KEY2/KEY3 去抖状态 */
-    effects_init();         /* 进入开机动画（MODE5 只跑一轮，然后进 MODE1） */
+    power_init();           /* 一键开关机：先等按键松开（按下上电时它正按着） */
+    effects_init();         /* 进入开机动画（MODE5 只跑一轮，然后进黑屏待机） */
 
     /* 启动顺序：
      *   TIM3 先跑 —— 它既是应用节拍，又通过 TRGO 触发 ADC 采样（必须在
@@ -43,6 +45,14 @@ void app_init(void)
 void app_tick(void)
 {
     adc_update();          /* 读 DMA 缓冲、换算 mV、轻滤波 */
+
+    /* 电源状态机放在最前面：它可能直接执行关机时序（永不返回），
+       所以在它之后要确认一下，已经关机就别再跑按键/模式/遥测了。 */
+    power_tick();
+    if (power_is_off() != 0u) {
+        return;
+    }
+
     keys_tick();           /* KEY2/KEY3 采样与去抖 */
     effects_tick();        /* 电位器解析 + 模式推进 */
 

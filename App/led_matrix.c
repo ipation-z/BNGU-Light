@@ -191,3 +191,11 @@ void led_matrix_init(void)
     cathodes_write(0u);
     GPIOB->BSRR = ANODE_ALL_MASK;    /* 置高 = PMOS 全关 */
 }
+
+void led_matrix_off(void)
+{
+    /* 阴极全低（NMOS 全关）+ 4 个阳极全高（PMOS 全关）→ 灯全灭、无漏电通路。
+       关机时序里必须在 HAL_TIM_Base_Stop_IT 之后再调用，否则中断会把 GPIO 改回去。 */
+    cathodes_write(0u);
+    GPIOB->BSRR = ANODE_ALL_MASK;
+}

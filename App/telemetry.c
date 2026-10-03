@@ -11,6 +11,7 @@
 #include "adc.h"
 #include "led_matrix.h"
 #include "effects.h"
+#include "power.h"
 #include "telemetry.h"
 
 /* DMA 发送期间这个缓冲必须一直有效，所以只能有一份、且只能静态 */
@@ -45,7 +46,7 @@ void telemetry_init(void)
     s_busy_ticks = 0u;
     s_fail_cnt = 0u;
     s_txbuf[0] = '\0';
-    telemetry_line("BOOT", "BNGU_Light v1.0  Phase-B: keys + modes");
+    telemetry_line("BOOT", "BNGU_Light v1.0  Phase-E: power latch");
 }
 
 void telemetry_line(const char *tag, const char *msg)
@@ -69,13 +70,14 @@ void telemetry_tick(void)
     /* BRIGHT 报的是"亮度峰值参数"，不是当前实际 duty
        （MODE5 渐亮/渐灭期间实际 duty 会临时低于它） */
     (void)snprintf(s_txbuf, sizeof s_txbuf,
-        "[TLM ] MODE=%u(%s) BRIGHT=%u/%u SPEED=%u POT=%s ADC1=%umV ADC2=%umV\r\n",
+        "[TLM ] MODE=%u(%s) BRIGHT=%u/%u SPEED=%u POT=%s PWR=%s ADC1=%umV ADC2=%umV\r\n",
         (unsigned)g_mode,
         effects_mode_name(),
         (unsigned)g_bright,
         (unsigned)DUTY_MAX,
         (unsigned)g_speed,
         effects_pot_name(),
+        power_state_name(),
         (unsigned)adc_mv(ADC_CH_KEY),
         (unsigned)adc_mv(ADC_CH_POT));
     tlm_send();
