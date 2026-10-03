@@ -53,10 +53,13 @@ static uint16_t    s_to;     /* 松开超时计数 */
 static uint16_t    s_start;  /* 上电静默期剩余节拍 */
 
 /*---------------------------------------------------------------------------*/
-/* 关机时序：永不返回 */
+/* 关机时序 */
 static void do_shutdown(void)
 {
-    uint8_t i;
+    uint8_t  i;
+    uint8_t  k1;
+    uint16_t mv;
+    char     msg[80];
 
     s_state = PWR_OFF;          /* 先置位，保证中断重入也不会再走一遍 */
 
@@ -67,8 +70,6 @@ static void do_shutdown(void)
         }
         HAL_Delay(2);
     }
-    telemetry_line("PWR", "shutdown - releasing latch");
-    HAL_Delay(10);              /* 让这行字从串口发出去（10ms，用户感觉不到） */
 
     /* ① 停掉三个定时器：之后不会再有扫描中断来改 GPIO */
     (void)HAL_TIM_Base_Stop_IT(&htim1);
@@ -79,10 +80,36 @@ static void do_shutdown(void)
     effects_set_duty(0u);
     led_matrix_off();
 
-    /* ③ 松开自锁：KEY1 拉低 → NMOS 关断 → PMOS 栅极被上拉 → 整机掉电 */
+    /* ③ 关断 BSS138：KEY1(PB11) 拉低。
+          BSS138 是 N 沟道：栅极高 = 导通 = 开机，栅极低 = 不导通 = 关机。 */
     HAL_GPIO_WritePin(KEY1_GPIO_Port, KEY1_Pin, GPIO_PIN_RESET);
 
-    /* ④ 等 3.3V 轨塌下去。SysTick 也停掉，让 CPU 彻底歇着不再耗电 */
+    /* ④ 回读一次，把"软件到底做没做"这件事钉死。
+          用 HAL_GPIO_ReadPin 直接读 IDR，能确认引脚真的变成低电平 ——
+          而不是只相信我们写过 BSRR。 */
+    k1 = (HAL_GPIO_ReadPin(KEY1_GPIO_Port, KEY1_Pin) == GPIO_PIN_SET) ? 1u : 0u;
+    mv = adc_mv(ADC_CH_KEY);
+    (void)snprintf(msg, sizeof msg,
+        "KEY1/PB11=%s  key=%umV %s  -> BSS138 should be OFF",
+        (k1 != 0u) ? "HIGH(!)" : "LOW",
+        (unsigned)mv,
+        (mv >= PWR_KEY_MV_THRESHOLD) ? "(button STILL HELD)" : "(button released)");
+    telemetry_line("PWR", msg);
+
+    /* ⑤ 等电源轨塌陷。
+          正常情况下 BSS138 一关断，3.3V 在几十 ms 内就没了，MCU 直接断电，
+          根本跑不到下面这段。
+          如果**没塌**，说明还有别的通路把 BSS138 的栅极拉着 —— 最常见的就是
+          电源键还按着（按键与 KEY1 并联在栅极上）。这时我们仍然活着，
+          就把实情打出来，而不是一声不响地卡在死循环里让人无从下手。 */
+    for (i = 0u; i < 30u; i++) {        /* 30 × 10ms = 300ms */
+        HAL_Delay(10);
+    }
+    telemetry_line("PWR", "STILL POWERED 300ms after KEY1 went LOW");
+    telemetry_line("PWR", "check 1: button still held?  check 2: BSS138 gate pulled up too hard?");
+
+    /* ⑥ 继续等。KEY1 已经是低电平，只要栅极上那条通路消失（松手/硬件正常），
+          电源立刻就会断。把 SysTick 停掉，让 CPU 彻底歇着不再耗电。 */
     HAL_SuspendTick();
     for (;;) {
         __WFI();
