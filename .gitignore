@@ -1,3 +1,6 @@
 build
 mx.scratch
 !.settings
+
+# 考核题原件（学校材料）不进版本库，也不公开
+*.docx
