@@ -203,6 +203,13 @@ void mode_walk_step(void)
             effects_set_duty(0u);
             telemetry_line("M5", "walk done -> fade in");
         } else {
+            /* 本模式自管亮度（own_duty = 1），所以游走阶段要自己维护 duty：
+               开机动画时 walk_duty_target() 恒为满档，作为 MODE5 时跟 g_bright，
+               这样电位器在游走过程中依然有效。
+               先设 duty 再发布权重 —— 权重换了而 duty 还没换的那个瞬间，
+               一旦被 TIM1 中断撞上就会闪一槽。 */
+            s_duty = walk_duty_target();
+            effects_set_duty(s_duty);
             render_walk_pos(s_pos);
             {
                 uint8_t hd = (uint8_t)(s_pos / POS_PER_DOT);

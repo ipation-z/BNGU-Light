@@ -31,14 +31,23 @@ typedef struct {
     const char *name;
     void (*init)(void);
     void (*step)(void);
+    /* 1 = 该模式自己逐 tick 算整屏 duty（呼吸/渐亮渐灭这类），
+           框架不要再预设成亮度峰值。
+       0 = 模式只填权重，整屏亮度由框架统一给 g_bright（流水灯这类）。
+
+       为什么需要这个标志：框架原来每 tick 都先 effects_set_duty(g_bright)，
+       再由模式覆盖。这两步之间有个"满档窗口" —— 权重已经换成新的、duty 还是
+       满档。窗口本身只有微秒级，但**万一被 TIM1 中断撞上，那一整槽（1ms）
+       就会以满档点亮**，表现为"随机闪一下"。自管亮度的模式跳过预设即可根除。 */
+    uint8_t own_duty;
 } mode_desc_t;
 
 static const mode_desc_t s_modes[MODE_COUNT] = {
-    [MODE_WRITE]  = {"WRITE",  mode_write_init,  mode_write_step },
-    [MODE_FLOW]   = {"FLOW",   mode_flow_init,   mode_flow_step  },
-    [MODE_BREATH] = {"BREATH", mode_breath_init, mode_breath_step},
-    [MODE_MIX]    = {"MIX",    mode_mix_init,    mode_mix_step   },
-    [MODE_WALK]   = {"WALK",   mode_walk_init,   mode_walk_step  }
+    [MODE_WRITE]  = {"WRITE",  mode_write_init,  mode_write_step,  0u},
+    [MODE_FLOW]   = {"FLOW",   mode_flow_init,   mode_flow_step,   0u},
+    [MODE_BREATH] = {"BREATH", mode_breath_init, mode_breath_step, 1u},
+    [MODE_MIX]    = {"MIX",    mode_mix_init,    mode_mix_step,    1u},
+    [MODE_WALK]   = {"WALK",   mode_walk_init,   mode_walk_step,   1u}
 };
 
 /* KEY2 的循环顺序（只列已经实现的模式，以后加模式只改这一行） */
@@ -196,8 +205,8 @@ static uint8_t pot_pct(uint16_t mv)
 }
 
 /* 平方律：让人眼感觉到的亮度大致跟着电位器线性变化。
-   最低给 BRIGHT_MIN 级（不是 1 级也不是全黑）—— 1 级时平均电流只有 0.15mA，
-   亮房间里看着就是黑的，容易被误判成故障。 */
+   下限是 BRIGHT_MIN（可配，当前为 1 级 = 最暗档）。
+   电位器 0% → BRIGHT_MIN 级，100% → DUTY_MAX 级。 */
 static uint8_t pct_to_bright(uint8_t p)
 {
     uint32_t x = (uint32_t)p * (uint32_t)p;          /* 0..10000 */
@@ -434,12 +443,16 @@ void effects_tick(void)
         pot_update();
     }
 
-    /* ⑤ 默认整屏亮度 = 亮度峰值；模式内部可以再覆盖（例如 MODE5 的渐亮/渐灭） */
-    effects_set_duty(g_bright);
-
-    /* ⑥ 跑当前模式 */
+    /* ⑤ 跑当前模式。
+       整屏亮度只在模式"不自管亮度"时才由框架预设成亮度峰值。
+       自管亮度的模式（MODE3/4/5 的呼吸与渐亮渐灭）必须跳过这一步 ——
+       否则每 tick 都会先出现一个"duty 满档但权重已是新的"的窗口，
+       被 TIM1 中断撞上时那一槽会以满档点亮，表现为随机闪一下。 */
     d = mode_desc(g_mode);
     if (d != NULL) {
+        if (d->own_duty == 0u) {
+            effects_set_duty(g_bright);
+        }
         d->step();
     }
 

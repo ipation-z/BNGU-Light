@@ -81,3 +81,21 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+
+# ---------------------------------------------------------------------------
+# 生成 .hex 与 .bin，方便烧录和分发
+#   .hex —— STM32CubeProgrammer / ST-Link Utility / 串口 ISP 都能直接烧
+#   .bin —— 体积最小，适合放进 Bootloader 或通过其它工具写入
+#   .elf —— 带调试信息，调试器用它
+# 注意：本文件是 CubeMX 生成的，重新生成会覆盖这里，
+#       所以上面 App/*.c 的源文件列表和这段 post-build 都要一并保留。
+# ---------------------------------------------------------------------------
+add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_OBJCOPY} -O ihex
+            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+            ${CMAKE_PROJECT_NAME}.hex
+    COMMAND ${CMAKE_OBJCOPY} -O binary
+            $<TARGET_FILE:${CMAKE_PROJECT_NAME}>
+            ${CMAKE_PROJECT_NAME}.bin
+    COMMENT "生成 ${CMAKE_PROJECT_NAME}.hex / ${CMAKE_PROJECT_NAME}.bin"
+)

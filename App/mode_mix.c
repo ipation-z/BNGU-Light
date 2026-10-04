@@ -69,6 +69,8 @@ void mode_mix_init(void)
 
 void mode_mix_step(void)
 {
+    uint8_t switched = 0u;
+
     if (++s_cnt >= phase_ticks()) {
         s_cnt = 0u;
         if (s_hold > 0u) {
@@ -77,15 +79,26 @@ void mode_mix_step(void)
             uint8_t nxt = (uint8_t)((s_phase + 1u) % BREATH_STEPS);
 
             if (nxt == 0u) {
-                /* 一个字母呼吸完了。此刻 duty 正好是 0（全黑），换字母看不见接缝 */
+                /* 一个字母呼吸完了，换下一个。
+                   ⚠️ 顺序不能反：必须**先把整屏压黑、再发布新字母的权重**。
+                   反过来的话，新字母的权重会在一瞬间配上一个偏高的 duty，
+                   表现为"呼吸开始前闪一下"。 */
+                effects_set_duty(0u);
                 show_letter((uint8_t)((s_letter + 1u) % LED_CHAR_COUNT));
-                s_hold = (uint8_t)BREATH_DARK_HOLD_PHASES;
-                telemetry_line("M4", g_char_name[s_letter]);
+                s_hold   = (uint8_t)BREATH_DARK_HOLD_PHASES;
+                switched = 1u;
             } else if (nxt == (BREATH_STEPS / 2u)) {
                 s_hold = (uint8_t)BREATH_BRIGHT_HOLD_PHASES;
             }
             s_phase = nxt;
         }
     }
+
     apply_duty();
+
+    /* 日志放在最后打：telemetry_line() 里要跑 snprintf、还可能启动 DMA，
+       插在"改权重"和"改 duty"之间会把那个窗口从微秒级拉长到上百微秒。 */
+    if (switched != 0u) {
+        telemetry_line("M4", g_char_name[s_letter]);
+    }
 }
